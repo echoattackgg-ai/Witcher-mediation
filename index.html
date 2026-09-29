@@ -179,7 +179,8 @@ kbd{font-family:var(--ui);color:var(--tan);background:rgba(0,0,0,.5);padding:0 5
 /* music */
 #scHost{position:fixed;left:0;bottom:0;width:2px;height:2px;overflow:hidden;opacity:.01;pointer-events:none}
 body.sc-unlock #scHost{left:auto;right:28px;bottom:calc(84px + env(safe-area-inset-bottom,0px));width:330px;height:166px;opacity:1;pointer-events:auto;z-index:7;border:1px solid #3d3b37;background:#000}
-body.sc-unlock #scHost iframe{width:330px!important;height:166px!important}
+body.sc-unlock #scHost iframe{display:none}
+body.sc-unlock #scHost iframe.show{display:block;width:330px!important;height:166px!important}
 #scHint{display:none;position:fixed;right:28px;bottom:calc(254px + env(safe-area-inset-bottom,0px));width:330px;box-sizing:border-box;z-index:7;background:rgba(8,8,8,.85);border:1px solid #3d3b37;padding:8px 12px;font-size:16px;color:var(--white)}
 body.sc-unlock #scHint{display:block}
 #scHost iframe{width:1px;height:1px;border:0}
@@ -1354,13 +1355,17 @@ function cleanTitle(t){
 const targetVol=()=>S.scVol*SL.k*(SL.done?0:1);
 const easeIO=k=>k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
 function makePlayer(place){
-  const P={place,w:null,ready:false,playing:false,sounds:[],idx:-1,title:'',vol:0,anim:null};
+  const P={unlocked:false,unlocking:false,place,w:null,ready:false,playing:false,sounds:[],idx:-1,title:'',vol:0,anim:null};
   const f=document.createElement('iframe');f.allow='autoplay';f.title='SoundCloud';
   f.src='https://w.soundcloud.com/player/?url='+encodeURIComponent(SC_LISTS[place])+'&auto_play=false&visual=false&show_artwork='+(IOS?'true':'false')+'&show_user=false&hide_related=true&show_comments=false&sharing=false&buying=false&download=false';
-  $('#scHost').appendChild(f);P.w=window.SC.Widget(f);
+  $('#scHost').appendChild(f);P.w=window.SC.Widget(f);P.frame=f;
   const E=window.SC.Widget.Events;
   P.w.bind(E.READY,()=>{P.ready=true;P.w.setVolume(IOS?100:0);P.w.getSounds(l=>{P.sounds=l||[];const cb=P.onReady;P.onReady=null;cb&&cb()})});
-  P.w.bind(E.PLAY,()=>{P.playing=true;document.body.classList.remove('sc-unlock');if(IOS){P.vol=1;P.w.setVolume(100)}info(P)});
+  P.w.bind(E.PLAY,()=>{P.playing=true;P.unlocked=true;
+    if(IOS){P.vol=1;P.w.setVolume(100);
+      if(P.unlocking&&P!==cur()){P.unlocking=false;P.w.pause();return}
+      P.unlocking=false;M.iosOn=true;document.body.classList.remove('sc-unlock');unlockOthers()}
+    info(P)});
   P.w.bind(E.PAUSE,()=>{P.playing=false;mpRender()});
   P.w.bind(E.FINISH,()=>{if(P===cur()&&S.scShuffle)nextIn(P)});
   P.w.bind(E.ERROR,()=>{if(P===cur())setTimeout(()=>nextIn(P),800)});
@@ -1400,11 +1405,13 @@ function mpRender(){
 // switch playlist: the new one fades in while the old one fades out
 function switchTo(place){
   if(!M.api)return;
-  if(IOS){const P=cur();if(!P||P.place===place)return;const was=P.playing;
-    P.place=place;P.ready=false;P.sounds=[];P.title='';P.idx=-1;mpRender();
-    P.w.load(SC_LISTS[place],{auto_play:was,visual:false,show_artwork:false,show_user:false,hide_related:true,show_comments:false,callback:()=>{
-      P.ready=true;P.w.getSounds(l=>{P.sounds=l||[];if(S.place!==place)return;randomStart(P);if(was)P.w.play();info(P)})}});
-    return}
+  if(IOS){
+    const P=cur(),i=M.players.findIndex(x=>x&&x.place===place);if(i<0||P&&P.place===place)return;
+    const N=M.players[i],was=!!(P&&P.playing)||M.iosOn;
+    if(P&&P.playing)P.w.pause();
+    M.active=i;
+    if(was&&N.ready){N.w.play();if(!N.unlocked)setTimeout(()=>{if(!N.playing&&cur()===N)showUnlock(N)},1500)}
+    info(N);mpRender();return}
   const old=cur();
   if(old&&old.place===place)return;
   const other=M.active^1;
@@ -1433,11 +1440,19 @@ function scToggle(){
 }
 function scNext(){const P=cur();if(P&&P.ready){M.userPaused=false;nextIn(P);ramp(P,targetVol(),400)}}
 function scPrev(){const P=cur();if(P&&P.ready){M.userPaused=false;P.w.prev();P.w.play();ramp(P,targetVol(),400)}}
+// iPad: a player may only start sound during a tap, so every preloaded player is started once on a tap and paused at once
+function showUnlock(P){M.players.forEach(x=>x&&x.frame.classList.toggle('show',x===P));document.body.classList.add('sc-unlock')}
+function unlockOthers(){M.players.forEach(x=>{if(x&&x.ready&&!x.unlocked&&x!==cur()){x.unlocking=true;x.w.play()}})}
+if(IOS)document.addEventListener('pointerdown',()=>{if(M.iosOn)unlockOthers()},true);
 function initSC(){
   const s=document.createElement('script');s.src='https://w.soundcloud.com/player/api.js';
   s.onerror=()=>{M.failed=true;mpRender()};
   s.onload=()=>{
-    M.api=true;const P=makePlayer(S.place);M.players[0]=P;M.active=0;
+    M.api=true;
+    if(IOS){
+      PKEYS.forEach((k,i)=>{const Q=makePlayer(k);M.players[i]=Q;Q.onReady=()=>{randomStart(Q);if(k===S.place){info(Q);showUnlock(Q)}}});
+      M.active=PKEYS.indexOf(S.place);return}
+    const P=makePlayer(S.place);M.players[0]=P;M.active=0;
     P.onReady=()=>{randomStart(P);info(P);if(IOS){document.body.classList.add('sc-unlock');return}if(M.wantPlay){P.w.play();ramp(P,targetVol(),3000)}};
   };
   document.head.appendChild(s);
