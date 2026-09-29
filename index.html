@@ -180,7 +180,7 @@ kbd{font-family:var(--ui);color:var(--tan);background:rgba(0,0,0,.5);padding:0 5
 #scHost{position:fixed;left:0;bottom:0;width:2px;height:2px;overflow:hidden;opacity:.01;pointer-events:none}
 body.sc-unlock #scHost{left:auto;right:28px;bottom:calc(84px + env(safe-area-inset-bottom,0px));width:330px;height:166px;opacity:1;pointer-events:auto;z-index:7;border:1px solid #3d3b37;background:#000}
 body.sc-unlock #scHost iframe{width:330px!important;height:166px!important}
-#scHint{display:none;position:fixed;right:28px;bottom:calc(258px + env(safe-area-inset-bottom,0px));width:330px;box-sizing:border-box;z-index:7;background:rgba(8,8,8,.85);border:1px solid #3d3b37;padding:8px 12px;font-size:16px;color:var(--white)}
+#scHint{display:none;position:fixed;right:28px;bottom:calc(254px + env(safe-area-inset-bottom,0px));width:330px;box-sizing:border-box;z-index:7;background:rgba(8,8,8,.85);border:1px solid #3d3b37;padding:8px 12px;font-size:16px;color:var(--white)}
 body.sc-unlock #scHint{display:block}
 #scHost iframe{width:1px;height:1px;border:0}
 .mp{position:fixed;right:28px;bottom:calc(22px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:4px;padding-right:6px!important;background:rgba(8,8,8,.66);border:1px solid #3d3b37;padding:5px 12px 5px 6px;max-width:min(460px,calc(100vw - 40px));transition:opacity .3s ease}
@@ -310,7 +310,7 @@ body.tab-music #dial,body.tab-music #phase,body.tab-music #keyHint,body.tab-musi
   <div class="mpt" id="mpTitle">Загрузка музыки…</div>
   <button class="mpb" id="mpNext" aria-label="Следующий трек"><svg viewBox="0 0 24 24"><path d="M15.6 5H18v14h-2.4zM5 5v14l10.4-7z"/></svg></button>
 </div>
-<div id="scHint">Коснись ▶ в плеере ниже, чтобы включить музыку. Это нужно один раз: iPad не даёт включать звук иначе.</div>
+<div id="scHint">Коснись ▶ в плеере ниже, чтобы включить музыку. Это нужно один раз: iPad не даёт включать звук иначе. Проверь, что громкость iPad не на нуле.<br><button class="pbtn" id="scOpenApp" style="margin-top:8px">Не играет? Открыть в SoundCloud</button> <button class="pbtn" id="scHide" style="margin-top:8px">Скрыть</button></div>
 <div id="scHost"></div>
 <div class="toast" id="toast" aria-live="polite"><div class="t1" id="toast1"></div><div class="t2" id="toast2"></div></div>
 <div class="pickhint" id="pickhint">Кликни туда, где на картинке огонь. <kbd>Esc</kbd> отмена</div>
@@ -1359,15 +1359,15 @@ function makePlayer(place){
   f.src='https://w.soundcloud.com/player/?url='+encodeURIComponent(SC_LISTS[place])+'&auto_play=false&visual=false&show_artwork='+(IOS?'true':'false')+'&show_user=false&hide_related=true&show_comments=false&sharing=false&buying=false&download=false';
   $('#scHost').appendChild(f);P.w=window.SC.Widget(f);
   const E=window.SC.Widget.Events;
-  P.w.bind(E.READY,()=>{P.ready=true;P.w.setVolume(0);P.w.getSounds(l=>{P.sounds=l||[];const cb=P.onReady;P.onReady=null;cb&&cb()})});
-  P.w.bind(E.PLAY,()=>{P.playing=true;document.body.classList.remove('sc-unlock');if(IOS)P.vol=1;info(P)});
+  P.w.bind(E.READY,()=>{P.ready=true;P.w.setVolume(IOS?100:0);P.w.getSounds(l=>{P.sounds=l||[];const cb=P.onReady;P.onReady=null;cb&&cb()})});
+  P.w.bind(E.PLAY,()=>{P.playing=true;document.body.classList.remove('sc-unlock');if(IOS){P.vol=1;P.w.setVolume(100)}info(P)});
   P.w.bind(E.PAUSE,()=>{P.playing=false;mpRender()});
   P.w.bind(E.FINISH,()=>{if(P===cur()&&S.scShuffle)nextIn(P)});
   P.w.bind(E.ERROR,()=>{if(P===cur())setTimeout(()=>nextIn(P),800)});
   return P;
 }
 const cur=()=>M.players[M.active];
-function setVol(P,v){P.vol=clamp(v,0,1);if(!IOS)P.w.setVolume(Math.round(P.vol*100))}
+function setVol(P,v){P.vol=clamp(v,0,1);P.w.setVolume(IOS?100:Math.round(P.vol*100))}
 function ramp(P,to,ms,done){
   if(IOS){P.vol=to;if(to===0&&done)done();else if(done)done();return}
   const from=P.vol,t0=performance.now(),id={};P.anim=id;
@@ -1422,7 +1422,7 @@ function switchTo(place){
   if(P.playing)P.w.pause();
   P.place=place;P.ready=false;P.sounds=[];P.title='';P.idx=-1;P.anim=null;
   P.w.load(SC_LISTS[place],{auto_play:false,visual:false,show_artwork:false,show_user:false,hide_related:true,show_comments:false,callback:()=>{
-    P.ready=true;setVol(P,0);P.w.getSounds(l=>{P.sounds=l||[];start()});
+    P.ready=true;if(!IOS)setVol(P,0);P.w.getSounds(l=>{P.sounds=l||[];start()});
   }});
 }
 function scToggle(){
@@ -1447,6 +1447,8 @@ $('#mpNext').addEventListener('click',scNext);$('#mpPrev').addEventListener('cli
 $('#mlPlay').addEventListener('click',scToggle);$('#mlNext').addEventListener('click',scNext);$('#mlPrev').addEventListener('click',scPrev);
 const shf=$('#mlShuffle');shf.setAttribute('aria-pressed',String(S.scShuffle));
 shf.addEventListener('click',()=>{S.scShuffle=!S.scShuffle;shf.setAttribute('aria-pressed',String(S.scShuffle));save()});
+$('#scHide').addEventListener('click',()=>document.body.classList.remove('sc-unlock'));
+$('#scOpenApp').addEventListener('click',()=>{location.href=SC_LISTS[S.place]});
 $('#mlOpen').addEventListener('click',()=>{const a=document.createElement('a');a.href=SC_LISTS[S.place];a.target='_blank';a.rel='noopener';a.click()});
 // music volume lives in settings next to the ambience sliders
 (function(){const el=$('#v-sc'),out=$('#o-sc');el.value=S.scVol;out.textContent=Math.round(S.scVol*100);paint(el);
