@@ -27,15 +27,16 @@ html,body{height:100%}
 body{margin:0;background:var(--black);color:var(--white);font-family:var(--ui);font-size:16px;font-weight:400;overflow:hidden;-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 #dial,#dial *{-webkit-user-select:none;user-select:none}
 #dial:focus{outline:none}
-#world{position:fixed;inset:0;overflow:hidden;will-change:transform;transform:scale(1.02)}
+#world{position:fixed;inset:0;overflow:hidden}
+body.lite #world{will-change:transform;transform:scale(1.02)}
 #world canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #shade{position:fixed;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,0) 70%,rgba(0,0,0,.42) 86%,rgba(0,0,0,.78)),radial-gradient(ellipse 75% 75% at 50% 50%,rgba(0,0,0,0) 55%,rgba(0,0,0,.65) 100%)}
 #dimmer{position:fixed;inset:0;pointer-events:none;background:#000;opacity:0;transition:opacity 1s linear}
-body.motion #world{animation:camV 90s ease-in-out infinite alternate}
-body.motion.p-velen #world{animation-name:camV;animation-duration:90s;transform-origin:45% 55%}
-body.motion.p-skellige #world{animation-name:camS;animation-duration:80s;transform-origin:62% 33%}
-body.motion.p-toussaint #world{animation-name:camT;animation-duration:60s;transform-origin:57% 45%}
-body.motion.p-kaer #world{animation-name:camK;animation-duration:70s;transform-origin:70% 55%}
+body.lite.motion #world{animation:camV 90s ease-in-out infinite alternate}
+body.lite.motion.p-velen #world{animation-name:camV;animation-duration:90s;transform-origin:45% 55%}
+body.lite.motion.p-skellige #world{animation-name:camS;animation-duration:80s;transform-origin:62% 33%}
+body.lite.motion.p-toussaint #world{animation-name:camT;animation-duration:60s;transform-origin:57% 45%}
+body.lite.motion.p-kaer #world{animation-name:camK;animation-duration:70s;transform-origin:70% 55%}
 @keyframes camV{from{transform:scale(1.06) translate(-1.4%,0)}to{transform:scale(1.08) translate(1.4%,-.4%)}}
 @keyframes camS{from{transform:scale(1.04) translate(0,0)}to{transform:scale(1.12) translate(-.8%,.8%)}}
 @keyframes camT{from{transform:scale(1.05) translate(0,-.8%)}to{transform:scale(1.07) translate(0,.8%)}}
@@ -223,7 +224,7 @@ body.tab-music #dial,body.tab-music #phase,body.tab-music #keyHint,body.tab-musi
   .toast{padding:10px 30px}
   body.med .nudge{left:50%;top:calc(110px + env(safe-area-inset-top,0px))}
 }
-@media (prefers-reduced-motion:reduce){body.motion #world{animation:none!important}.med-screen,.toast,aside.panel,.fade{transition:none}.nudge,#dial.due #dueRing{animation:none}}
+@media (prefers-reduced-motion:reduce){.med-screen,.toast,aside.panel,.fade{transition:none}.nudge,#dial.due #dueRing{animation:none}}
 </style>
 
 <div id="world" aria-hidden="true"><canvas id="bgc"></canvas></head>
@@ -621,11 +622,12 @@ function frame(now){
   const e=sunElev(T.hour),L=smooth(-.22,.4,e);Lnow=L;
   const warm=clamp(1-Math.abs(e+.02)/.28,0,1);
   const camKey=S.place+'|'+S.motion;
-  if(camKey!==lastCam){lastCam=camKey;const bl=document.body.classList;PKEYS.forEach(k=>bl.toggle('p-'+k,k===S.place));bl.toggle('motion',!!S.motion)}
+  if(camKey!==lastCam){lastCam=camKey;const bl=document.body.classList;PKEYS.forEach(k=>bl.toggle('p-'+k,k===S.place));bl.toggle('motion',!!S.motion);bl.toggle('lite',LITE)}
   rect=coverRect(bgImg);
   // background layer: redrawn only when something changed; the camera moves it with CSS
   if(bgImg){
     if(baked.img!==bgImg||Math.abs(baked.L-L)>.004||Math.abs(baked.warm-warm)>.004){bakeGrade(bgImg,L,warm);bgDirty=true}
+    if(!LITE&&S.motion)bgDirty=true;
     if(bgDirty||fade){
       bgx.globalAlpha=1;bgx.fillStyle='#050505';bgx.fillRect(0,0,W,H);
       bgx.drawImage(gradeCan,rect.x,rect.y,rect.w,rect.h);
@@ -768,8 +770,13 @@ const CAM={
 coverRect=function(img){
   if(!img)return{x:0,y:0,w:W,h:H};
   const c=CAM[S.place]||CAM.velen;
-  const sc=Math.max(W/img.width,H/img.height),w=img.width*sc,h=img.height*sc;
-  return{x:c.f[0]*(W-w),y:c.f[1]*(H-h),w,h};
+  if(LITE){const sc=Math.max(W/img.width,H/img.height),w=img.width*sc,h=img.height*sc;return{x:c.f[0]*(W-w),y:c.f[1]*(H-h),w,h}}
+  const m=S.motion?1:0;
+  const z=c.z+m*c.za*Math.sin(t*2*Math.PI/c.zp);
+  const sc=Math.max(W/img.width,H/img.height)*(m?z:1),w=img.width*sc,h=img.height*sc;
+  let x=c.f[0]*(W-w),y=c.f[1]*(H-h);
+  x+=m*Math.sin(t*2*Math.PI/c.pp)*(w-W)*c.px*.5;y+=m*Math.sin(t*2*Math.PI/c.pq)*(h-H)*c.py*.5;
+  return{x:clamp(x,W-w,0),y:clamp(y,H-h,0),w,h};
 };
 const toScr=(u,v)=>[rect.x+u*rect.w,rect.y+v*rect.h];
 const FX={};
