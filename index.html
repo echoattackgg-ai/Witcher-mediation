@@ -199,6 +199,14 @@ body.tab-music #dial,body.tab-music #phase,body.tab-music #keyHint,body.tab-musi
 .mlist:empty::after{content:"Загрузка плейлиста…";display:block;padding:12px;color:var(--grey)}
 .mvol{display:grid;grid-template-columns:auto minmax(0,1fr);gap:12px;align-items:center;font-size:15px;color:var(--grey);text-transform:uppercase}
 @media (max-width:640px){.mp{left:16px;right:16px;bottom:calc(10px + env(safe-area-inset-bottom,0px));max-width:none}.mpt{max-width:none}}
+
+.quote{position:fixed;right:28px;bottom:calc(84px + env(safe-area-inset-bottom,0px));max-width:min(440px,calc(100vw - 56px));text-align:right;background:linear-gradient(90deg,rgba(0,0,0,0),rgba(0,0,0,.55) 25%);border:0;padding:10px 4px 10px 40px;cursor:pointer;display:flex;flex-direction:column;gap:4px;color:var(--white);transition:opacity .3s ease}
+.quote .q{font-size:18px;line-height:1.35;text-shadow:0 1px 8px #000;text-wrap:balance}
+.quote .a{font-size:14px;color:var(--tan-dim);text-transform:uppercase;letter-spacing:.04em}
+body.idle:not(.panel-open) .quote{opacity:.45}
+body.sc-unlock .quote{display:none}
+textarea{font-family:var(--ui);font-size:15px;background:#0e0e0d;color:var(--white);border:1px solid #3a3835;padding:8px;resize:vertical;width:100%;box-sizing:border-box;user-select:text;-webkit-user-select:text}
+@media (max-width:640px){.quote{left:16px;right:16px;bottom:calc(64px + env(safe-area-inset-bottom,0px));max-width:none}}
 @media (hover:none) and (pointer:coarse){.key b{display:none}#keyHint{display:none!important}.key{padding:4px 10px}}
 @media (max-width:900px){
   .topbar{grid-template-columns:1fr auto;padding:14px 16px 30px}
@@ -302,6 +310,7 @@ body.tab-music #dial,body.tab-music #phase,body.tab-music #keyHint,body.tab-musi
   <div class="mpt" id="mpTitle">Загрузка музыки…</div>
   <button class="mpb" id="mpNext" aria-label="Следующий трек"><svg viewBox="0 0 24 24"><path d="M15.6 5H18v14h-2.4zM5 5v14l10.4-7z"/></svg></button>
 </div>
+<button class="quote ui ctl" id="quote" hidden><span class="q" id="quoteText"></span><span class="a" id="quoteAuthor"></span></button>
 <div id="scHint">Коснись ▶ в плеере ниже, чтобы включить музыку. Это нужно один раз: iPad не даёт включать звук иначе. Проверь, что громкость iPad не на нуле.<br><button class="pbtn" id="scOpenApp" style="margin-top:8px">Не играет? Открыть в SoundCloud</button> <button class="pbtn" id="scHide" style="margin-top:8px">Скрыть</button></div>
 <div id="scHost"></div>
 <div class="toast" id="toast" aria-live="polite"><div class="t1" id="toast1"></div><div class="t2" id="toast2"></div></div>
@@ -349,6 +358,13 @@ body.tab-music #dial,body.tab-music #phase,body.tab-music #keyHint,body.tab-musi
     <label class="slider" hidden>Размер<input type="range" id="fireSize" min="0.4" max="2.4" step="0.05"><output id="o-size"></output></label>
     <label class="check"><input type="checkbox" id="motion">Медленное движение камеры</label>
     <button class="pbtn" id="bgReset">Вернуть стандартный фон</button>
+  </section>
+  <section>
+    <h3>Цитаты</h3>
+    <p class="note">По одной на строку: <b>Цитата — Автор</b>. Каждый день показывается новая, клик по цитате на экране открывает следующую.</p>
+    <textarea id="quotesInput" rows="7" placeholder="Текст цитаты — Лютик"></textarea>
+    <div class="prow"><button class="pbtn" id="quotesSave">Сохранить</button><span class="note" id="quotesCount"></span></div>
+    <label class="check"><input type="checkbox" id="quotesOn">Показывать цитату на экране</label>
   </section>
   <section>
     <h3>Путь ведьмака</h3>
@@ -1338,8 +1354,37 @@ document.addEventListener('visibilitychange',keepAwake);
 window.addEventListener('pointerdown',function firstTap(){keepAwake();if(standalone&&!A.on)toggleSound()},{once:true});
 if(standalone)document.body.classList.add('inapp');
 
+/* ---------- quotes ---------- */
+if(!Array.isArray(S.quotes))S.quotes=[];
+if(S.quotesOn===undefined)S.quotesOn=true;
+function parseQuotes(txt){
+  return txt.split(/\n+/).map(l=>l.trim()).filter(Boolean).map(l=>{
+    const m=l.match(/^(.*\S)\s+[—–-]{1,2}\s+([^—–]+)$/);
+    let q=m?m[1]:l,a=m?m[2].trim():'';
+    q=q.replace(/^[«"“„']+|[»"”']+$/g,'').trim();
+    return{q,a};
+  }).filter(x=>x.q);
+}
+let qi=-1;
+function showQuote(i,announce){
+  const box=$('#quote');
+  if(!S.quotesOn||!S.quotes.length){box.hidden=true;return}
+  qi=((i%S.quotes.length)+S.quotes.length)%S.quotes.length;
+  const x=S.quotes[qi];$('#quoteText').textContent='«'+x.q+'»';$('#quoteAuthor').textContent=x.a?'— '+x.a:'';
+  box.hidden=false;
+  if(announce)toast('«'+x.q+'»',x.a?'— '+x.a:'');
+}
+function dayIndex(){const d=new Date();return Math.floor((d-new Date(d.getFullYear(),0,0))/864e5)}
+$('#quote').addEventListener('click',()=>showQuote(qi+1));
+const qIn=$('#quotesInput');qIn.value=S.quotes.map(x=>x.q+(x.a?' — '+x.a:'')).join('\n');
+const qCount=()=>$('#quotesCount').textContent=S.quotes.length?S.quotes.length+' '+plural(S.quotes.length,'цитата','цитаты','цитат'):'Пока пусто';
+qCount();
+$('#quotesSave').addEventListener('click',()=>{S.quotes=parseQuotes(qIn.value);save();qCount();showQuote(dayIndex());toast('Цитаты сохранены',S.quotes.length+' '+plural(S.quotes.length,'цитата','цитаты','цитат'))});
+const qOn=$('#quotesOn');qOn.checked=S.quotesOn;qOn.addEventListener('change',()=>{S.quotesOn=qOn.checked;save();showQuote(qi<0?dayIndex():qi)});
+setTimeout(()=>{const today=dayKey(new Date());const first=S.quoteDay!==today;S.quoteDay=today;save();showQuote(dayIndex(),first&&S.quotes.length>0)},4000);
+
 /* ---------- web version: pick up new releases by itself ---------- */
-const BUILD_ID='1790670811';
+const BUILD_ID='1790672295';
 async function checkUpdate(){
   if(!/^https?:/.test(location.protocol))return;
   try{const r=await fetch(location.pathname+'?v='+Date.now(),{cache:'no-store'});const txt=await r.text();
