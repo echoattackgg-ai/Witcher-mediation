@@ -32,15 +32,6 @@ body.lite #world{will-change:transform;transform:scale(1.02)}
 #world canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
 #shade{position:fixed;inset:0;pointer-events:none;background:linear-gradient(to bottom,rgba(0,0,0,0) 70%,rgba(0,0,0,.42) 86%,rgba(0,0,0,.78)),radial-gradient(ellipse 75% 75% at 50% 50%,rgba(0,0,0,0) 55%,rgba(0,0,0,.65) 100%)}
 #dimmer{position:fixed;inset:0;pointer-events:none;background:#000;opacity:0;transition:opacity 1s linear}
-body.lite.motion #world{animation:camV 90s ease-in-out infinite alternate}
-body.lite.motion.p-velen #world{animation-name:camV;animation-duration:90s;transform-origin:45% 55%}
-body.lite.motion.p-skellige #world{animation-name:camS;animation-duration:80s;transform-origin:62% 33%}
-body.lite.motion.p-toussaint #world{animation-name:camT;animation-duration:60s;transform-origin:57% 45%}
-body.lite.motion.p-kaer #world{animation-name:camK;animation-duration:70s;transform-origin:70% 55%}
-@keyframes camV{from{transform:scale(1.06) translate(-1.4%,0)}to{transform:scale(1.08) translate(1.4%,-.4%)}}
-@keyframes camS{from{transform:scale(1.04) translate(0,0)}to{transform:scale(1.12) translate(-.8%,.8%)}}
-@keyframes camT{from{transform:scale(1.05) translate(0,-.8%)}to{transform:scale(1.07) translate(0,.8%)}}
-@keyframes camK{from{transform:scale(1.06) translate(1%,-1%)}to{transform:scale(1.1) translate(-1.4%,1%)}}
 .fade{transition:opacity .3s ease,visibility 0s linear 0s}
 body.idle:not(.panel-open) .fade{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .3s ease,visibility 0s linear .3s}
 body.hideui .ui{opacity:0!important;pointer-events:none!important}
@@ -611,6 +602,20 @@ function bakeOverlay(){
   vg.addColorStop(0,'rgba(0,0,0,0)');vg.addColorStop(1,'rgba(0,0,0,.7)');ocx.fillStyle=vg;ocx.fillRect(0,0,W,H);
   ovDirty=false;
 }
+// tablet camera: a compositor animation, smooth at the screen's own refresh rate
+const CAMA={
+  velen:{o:'45% 55%',d:50000,k:[{transform:'scale(1.07) translate(-2.2%,0.4%)'},{transform:'scale(1.12) translate(2.2%,-0.6%)'}]},
+  skellige:{o:'62% 33%',d:45000,k:[{transform:'scale(1.05) translate(0.6%,-0.4%)'},{transform:'scale(1.15) translate(-1.2%,1%)'}]},
+  toussaint:{o:'57% 45%',d:40000,k:[{transform:'scale(1.07) translate(-0.6%,-1.4%)'},{transform:'scale(1.11) translate(0.8%,1.4%)'}]},
+  kaer:{o:'70% 55%',d:45000,k:[{transform:'scale(1.07) translate(1.8%,-1.4%)'},{transform:'scale(1.13) translate(-2%,1.4%)'}]}
+};
+function startCam(){
+  const w=document.getElementById('world');if(!w.animate)return;
+  w.getAnimations().forEach(a=>a.cancel());
+  if(!LITE||!S.motion){w.style.transform='';return}
+  const c=CAMA[S.place]||CAMA.velen;w.style.transformOrigin=c.o;
+  w.animate(c.k,{duration:c.d,iterations:Infinity,direction:'alternate',easing:'ease-in-out'});
+}
 let lastDraw=0,lastCam='',lastDim=0;
 function frame(now){
   requestAnimationFrame(frame);
@@ -623,7 +628,7 @@ function frame(now){
   const e=sunElev(T.hour),L=smooth(-.22,.4,e);Lnow=L;
   const warm=clamp(1-Math.abs(e+.02)/.28,0,1);
   const camKey=S.place+'|'+S.motion;
-  if(camKey!==lastCam){lastCam=camKey;const bl=document.body.classList;PKEYS.forEach(k=>bl.toggle('p-'+k,k===S.place));bl.toggle('motion',!!S.motion);bl.toggle('lite',LITE)}
+  if(camKey!==lastCam){lastCam=camKey;const bl=document.body.classList;PKEYS.forEach(k=>bl.toggle('p-'+k,k===S.place));bl.toggle('motion',!!S.motion);bl.toggle('lite',LITE);startCam()}
   rect=coverRect(bgImg);
   // background layer: redrawn only when something changed; the camera moves it with CSS
   if(bgImg){
@@ -1332,6 +1337,17 @@ async function keepAwake(){try{if('wakeLock' in navigator&&document.visibilitySt
 document.addEventListener('visibilitychange',keepAwake);
 window.addEventListener('pointerdown',function firstTap(){keepAwake();if(standalone&&!A.on)toggleSound()},{once:true});
 if(standalone)document.body.classList.add('inapp');
+
+/* ---------- web version: pick up new releases by itself ---------- */
+const BUILD_ID='1790670811';
+async function checkUpdate(){
+  if(!/^https?:/.test(location.protocol))return;
+  try{const r=await fetch(location.pathname+'?v='+Date.now(),{cache:'no-store'});const txt=await r.text();
+    const m=txt.match(/BUILD_ID='(\d+)'/);if(m&&m[1]!==BUILD_ID)location.reload()}catch(e){}
+}
+setInterval(checkUpdate,600000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')checkUpdate()});
+setTimeout(checkUpdate,5000);
 
 
 /* ---------- SoundCloud music: two players for crossfades ---------- */
